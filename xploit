@@ -1,0 +1,1321 @@
+#!/bin/bash
+
+sudo echo $'
+ ___    ___ ________  ___       ________  ___  _________
+|\  \  /  /|\   __  \|\  \     |\   __  \|\  \|\___   ___\
+\ \  \/  / | \  \|\  \ \  \    \ \  \|\  \ \  \|___ \  \_|
+ \ \    / / \ \   ____\ \  \    \ \  \\ \  \ \  \   \ \  \
+  /     \/   \ \  \___|\ \  \____\ \  \\ \  \ \  \   \ \  \
+ /  /\   \    \ \__\    \ \_______\ \_______\ \__\   \ \  \
+/__/ /\ __\    \|__|     \|_______|\|_______|\|__|    \ \__\
+|__|/ \|__|                manager                     \|__|
+
+                        ver (1.0.0)
+                   by Lukáš \'lokai\' Klíma
+'
+
+
+# Define the Metasploit binary and dependencies to check for
+METASPLOIT_BINARY="msfconsole"
+DEPENDENCIES=("ruby" "psql" "nmap")
+FFUF_BINARY="ffuf"
+FFUF_DEPENDENCIES=("go" "curl" "wget")
+WPSCAN_BINARY="wpscan"
+TOOLS=("subfinder" "katana" "nmap" "dig" "wpscan" "ffuf" "xss_vibes" "metasploit")
+
+# Function to check if a binary exists in PATH
+check_binary() {
+    command -v "$1" &>/dev/null
+}
+
+# Function to search for the Metasploit binary recursively
+find_metasploit() {
+    echo -e "\e[34m[INFO]\e[0m Checking for Metasploit installation..."
+    sleep 1
+    local result=$(find "$HOME" -name "$METASPLOIT_BINARY" -type f 2>/dev/null)
+
+    if  [ -z  "$result" ]; then
+        echo -e "\n\e[31m[ERROR]\e[0m Metasploit is not installed."
+        return 1
+    fi
+    return 0
+}
+
+# Function to search for the ffuf binary in $HOME/go/bin
+find_ffuf() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for ffuf installation..."
+    sleep 1
+    local result=$(find "$HOME/go/bin" -name "$FFUF_BINARY" -type f 2>/dev/null)
+
+    if [ -z "$result" ]; then
+        echo -e "\e[31m[ERROR]\e[0m ffuf binary is not installed."
+        return 1
+    fi
+    return 0
+}
+
+# Function to search for the dig binary specifically in /usr/bin
+find_dig() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for DIG installation..."
+    sleep 1
+    if [ -f "/usr/bin/$DIG_BINARY" ]; then
+        return 0
+    else
+        echo -e "\e[31m[ERROR]\e[0m dig binary is not installed."
+        return 1
+    fi
+}
+
+# Check if Metasploit is correctly installed
+check_metasploit_installation() {
+    local all_dependecies_met=true
+
+    for dep in "${DEPENDENCIES[@]}"; do
+        if ! check_binary "$dep"; then
+            echo -e "\e[31m[MISSING]\e[0m $dep is not installed."
+            all_dependencies_met=false
+        fi
+        sleep 0.5
+    done
+
+    if $all_dependencies_met; then
+        echo -e "\e[32m[SUCCESS]\e[0m Metasploit seems to be installed properly."
+    else
+        echo -e  "\e[33m[WARNING]\e[0m Some dependencies are missing"
+    fi
+}
+
+# Check ffuf installation and dependencies only if ffuf binary is found
+check_ffuf_installation() {
+    if find_ffuf; then
+        echo -e "\e[34m[INFO]\e[0m Checking ffuf dependencies..."
+        local all_dependencies_met=true
+
+        for dep in "${FFUF_DEPENDENCIES[@]}"; do
+            if ! check_binary "$dep"; then
+                echo -e "\e[31m[MISSING]\e[0m $dep is not installed."
+                all_dependencies_met=false
+            fi
+            sleep 0.5
+        done
+
+        if ! $all_dependencies_met; then
+            echo -e "\e[33m[WARNING]\e[0m Some ffuf dependencies are missing."
+        fi
+
+        # Check for SecLists if all dependencies are met
+        local seclists_path=$(sudo find / -name "SecLists" -type d 2>/dev/null)
+        if [ -z "$seclists_path" ]; then
+            echo -e "\e[31m[MISSING]\e[0m SecLists folder not found in the system. ffuf may not work properly."
+        fi
+    fi
+}
+
+# Function to verify dig is ready for use
+check_dig_installation() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for Domain Info Gropper Installation.."
+    if check_binary "$DIG_BINARY"; then
+        echo -e "\e[32m[SUCCESS]\e[0m DIG seems installed properly."
+    else
+        echo -e "\e[31m[ERROR]\e[0m DIG is not installed."
+    fi
+}
+
+# Function to check for the required files for wpscan
+check_wpscan_installation() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for wpscan installation..."
+    echo -e "\e[34m[INFO]\e[0m This might take a while."
+
+    # Search for the wpscan binary in the specified directories
+    if [ ! -f "/usr/local/bin/$WPSCAN_BINARY" ]; then
+        local result=$(find /var/lib/gems/ -type f -path "*/gems/wpscan-*/bin/wpscan" 2>/dev/null)
+        if [ ! -n "$result" ]; then
+            echo -e "\e[31m[ERROR]\e[0m wpscan is not installed."
+            return 1
+        fi
+    fi
+
+    # Check for the required files for wpscan
+    local missing_files=()
+    local wpscan_dirs=("/var/lib/gems" "/usr/local/bin")
+    local files=("wpscan.rb" "parsed_cli.rb" "helper.rb" "finders.rb" "smart_url_checker.rb"
+                  "wp_item_version.rb" "wp_version.rb" "finder.rb" "query_parameter.rb"
+                  "config_parser.rb" "javascript_var.rb" "xpath.rb" "body_pattern.rb"
+                  "comment.rb" "header_pattern.rb" "db.rb" "browser.rb" "vulnerable.rb"
+                  "enumeration.rb" "xmlrpc.rb" "vuln_api.rb" "wordpress.rb" "update.rb"
+                  "http.rb" "wp_item.rb" "wp_version.rb" "plugins.rb" "fingerprints.rb"
+                  "wp_items.rb" "updater.rb" "sponsor.rb" "theme.rb" "themes.rb"
+                  "plugin.rb" "base.rb" "references.rb" "target.rb" "version.rb"
+                  "errors.rb" "controller.rb" "custom_directories.rb" "response.rb"
+                  "vulnerability.rb" "controllers.rb")
+
+    for dir in "${wpscan_dirs[@]}"; do
+        for file in "${files[@]}"; do
+            if ! find "$dir" -type f -name "$file" &>/dev/null; then
+                missing_files+=("$file")
+            fi
+        done
+    done
+
+    # Log missing files, if any
+    if [ ${#missing_files[@]} -eq 0 ]; then
+        echo -e "\e[32m[SUCCESS]\e[0m wpscan seems to be installed properly."
+    else
+        for file in "${missing_files[@]}"; do
+            echo -e "\e[31m[MISSING]\e[0m $file"
+            sleep 0.3
+        done
+        echo -e "\e[33m[WARNING]\e[0m wpscan is missing some files."
+    fi
+}
+
+# Function to check if Nmap is installed
+check_nmap_installation() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for Nmap installation..."
+    sleep 1
+    if check_binary "nmap"; then
+        echo -e "\e[32m[SUCCESS]\e[0m Nmap seems to be installed properly."
+    else
+        echo -e "\e[31m[ERROR]\e[0m Nmap is not installed."
+    fi
+}
+
+folder_path=$(find "$HOME" -type d -name "xss_vibes" 2>/dev/null)
+files=("adder.py" "main.py" "requirements" "waf_list.txt" "xss_vibes.png" "Header.py" "payloads.json" "README.md" "venv" "Waf.py")
+
+check_xss_installation() {
+    missing_files=false
+    echo -e "\n\e[34m[INFO]\e[0m Checking for XSS_VIBES installation"
+    sleep 1
+
+    if [ -n "$folder_path" ]; then
+        for file in "${files[@]}"; do
+                if [ ! -e "$folder_path/$file" ]; then
+                        echo -e "\e[31m[MISSING]\e[0m $file is missing, xss_vibes may not be installed corectly."
+                        missing_files=true
+                fi
+                sleep 0.1
+        done
+
+        if $missing_files; then
+                echo -e "\e[33m[WARNING]\e[0m xss_vibes is missing some files."
+        else
+                echo -e "\e[32m[SUCCESS]\e[0m xss_vibes seems to be installed properly."
+        fi
+   else
+        echo -e "\e[31m[ERROR]\e[0m xss_vibes folder not found in the filesystem."
+   fi
+}
+
+check_subfinder_installation() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for Subfinder installation..."
+    sleep 1
+
+    # Define an array of checks (directories and files to check)
+    missing_files=false
+
+    # Main subfinder folder
+    p="$HOME/subfinder"
+
+    # Directories to check inside /subfinder/v2
+    dirs_to_check=(
+        "$p/v2"
+        "$p/v2/pkg/passive"
+        "$p/v2/pkg/resolve"
+        "$p/v2/pkg/runner"
+        "$p/v2/pkg/subscraping"
+        "$p/v2/pkg/testutils"
+        "$p/v2/cmd/subfinder"
+    )
+
+    # Files to check inside specific directories
+    files_to_check=(
+        "$p/go.mod"
+        "$p/v2/go.mod"
+        "$p/v2/go.sum"
+        "$p/v2/Makefile"
+        "$p/v2/examples/main.go"
+        "$p/v2/pkg/testutils/integration.go"
+        "$p/v2/cmd/subfinder/main.go"
+    )
+
+    # Passive folder specific files
+    passive_files=("doc.go" "sources.go" "sources_w_auth_test.go" "passive.go" "sources_test.go" "sources_wo_auth_test.go")
+    # Resolve folder specific files
+    resolve_files=("client.go" "doc.go" "resolve.go")
+    # Runner folder specific files
+    runner_files=("banners.go" "doc.go" "enumerate_test.go" "options.go" "runner.go" "util.go" "config.go" "enumerate.go" "initialize.go" "outputter.go" "stats.go" "validate.go")
+
+    # Check for existence of main folder
+    if [ ! -d "$p" ]; then
+        echo -e "\e[31m[ERROR]\e[0m Subfinder is not installed."
+        missing_files=false
+        return 1
+    fi
+
+    # Loop through and check if all directories exist
+    for dir in "${dirs_to_check[@]}"; do
+        if [ ! -d "$dir" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $dir directory is missing."
+            missing_files=true
+        fi
+    done
+
+    # Loop through and check if all files exist
+    for file in "${files_to_check[@]}"; do
+        if [ ! -e "$file" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $file is missing."
+            missing_files=true
+        fi
+    done
+
+    # Check specific files inside /subfinder/v2/pkg/passive/
+    for file in "${passive_files[@]}"; do
+        if [ ! -e "$p/v2/pkg/passive/$file" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $p/v2/pkg/passive/$file is missing."
+            missing_files=true
+        fi
+    done
+
+    # Check specific files inside /subfinder/v2/pkg/resolve/
+    for file in "${resolve_files[@]}"; do
+        if [ ! -e "$p/v2/pkg/resolve/$file" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $p/v2/pkg/resolve/$file is missing."
+            missing_files=true
+        fi
+    done
+
+    # Check specific files inside /subfinder/v2/pkg/runner/
+    for file in "${runner_files[@]}"; do
+        if [ ! -e "$p/v2/pkg/runner/$file" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $p/v2/pkg/runner/$file is missing."
+            missing_files=true
+        fi
+    done
+
+    # Check for Go files inside /subfinder/v2/pkg/subscraping/sources/
+    for source_dir in "$p/v2/pkg/subscraping/sources"/*; do
+        if [ -d "$source_dir" ]; then
+            go_file_name="$(basename "$source_dir").go"
+            if [ ! -e "$source_dir/$go_file_name" ]; then
+                echo -e "\e[31m[MISSING]\e[0m $source_dir/$go_file_name is missing."
+                missing_files=true
+            fi
+        fi
+    done
+
+    # Final check: If something is missing, show a warning
+    if $missing_files; then
+        echo -e "\e[33m[WARNING]\e[0m Subfinder is missing some files."
+    else
+        echo -e "\e[32m[SUCCESS]\e[0m Subfinder seems to be installed properly."
+    fi
+}
+
+check_katana_installation() {
+    echo -e "\n\e[34m[INFO]\e[0m Checking for Katana installation..."
+    sleep 1
+
+    # Define an array of checks (directories and files to check)
+    missing_files=false
+
+    # Main subfinder folder
+    p="$HOME/katana"
+
+    # Directories to check inside /katana
+    dirs_to_check=(
+        "$p/internal"
+        "$p/internal/runner"
+        "$p/internal/testutils"
+        "$p/integration_tests"
+        "$p/pkg"
+        "$p/pkg/engine"
+        "$p/pkg/navigation"
+        "$p/pkg/output"
+        "$p/pkg/types"
+        "$p/pkg/utils"
+        "$p/pkg/utils/extensions"
+        "$p/pkg/utils/filters"
+        "$p/pkg/utils/queue"
+        "$p/pkg/utils/scope"
+        "$p/pkg/engine/common"
+        "$p/pkg/engine/hybrid"
+        "$p/pkg/engine/parser"
+        "$p/pkg/engine/parser/files"
+        "$p/pkg/engine/standard"
+        "$p/cmd"
+        "$p/cmd/functional-test"
+        "$p/cmd/integration-test"
+        "$p/cmd/katana"
+        "$p/cmd/tools"
+        "$p/cmd/tools/crawl-maze-score"
+    )
+
+    # Files to check inside specific directories
+    files_to_check=(
+        "$p/go.mod"
+        "$p/go.sum"
+        "$p/Dockerfile"
+        "$p/Makefile"
+        "$p/internal/runner/banner.go"
+        "$p/internal/runner/executer.go"
+        "$p/internal/runner/healthcheck.go"
+        "$p/internal/runner/options.go"
+        "$p/internal/runner/runner.go"
+        "$p/internal/testutils/helper.go"
+        "$p/internal/testutils/integration.go"
+        "$p/internal/testutils/testutils.go"
+        "$p/integration_tests/run.sh"
+        "$p/pkg/engine/engine.go"
+        "$p/pkg/engine/common/base.go"
+        "$p/pkg/engine/common/error.go"
+        "$p/pkg/engine/common/http.go"
+        "$p/pkg/engine/hybrid/crawl.go"
+        "$p/pkg/engine/hybrid/doc.go"
+        "$p/pkg/engine/hybrid/hijack.go"
+        "$p/pkg/engine/hybrid/hybrid.go"
+        "$p/pkg/engine/parser/parser_generic.go"
+        "$p/pkg/engine/parser/parser.go"
+        "$p/pkg/engine/parser/parser_nojs.go"
+        "$p/pkg/engine/parser/parser_test.go"
+        "$p/pkg/engine/parser/files/request.go"
+        "$p/pkg/engine/parser/files/robotstxt.go"
+        "$p/pkg/engine/parser/files/robotstxt_test.go"
+        "$p/pkg/engine/parser/files/sitemapxml.go"
+        "$p/pkg/engine/parser/files/sitemapxml_test.go"
+        "$p/pkg/engine/standard/crawl.go"
+        "$p/pkg/engine/standard/doc.go"
+        "$p/pkg/engine/standard/standard.go"
+        "$p/pkg/navigation/request.go"
+        "$p/pkg/navigation/response.go"
+        "$p/pkg/output/custom_field.go"
+        "$p/pkg/output/fields.go"
+        "$p/pkg/output/file_writer.go"
+        "$p/pkg/output/format_screen.go"
+        "$p/pkg/output/output.go"
+        "$p/pkg/output/result.go"
+        "$p/pkg/output/error.go"
+        "$p/pkg/output/fields_test.go"
+        "$p/pkg/output/format_json.go"
+        "$p/pkg/output/options.go"
+        "$p/pkg/output/responses.go"
+        "$p/pkg/types/crawler_options.go"
+        "$p/pkg/types/options.go"
+        "$p/pkg/types/options_test.go"
+        "$p/pkg/utils/formfields_test.go"
+        "$p/pkg/utils/jsluice.go"
+        "$p/pkg/utils/maps_test.go"
+        "$p/pkg/utils/formfill.go"
+        "$p/pkg/utils/jsluice_test.go"
+        "$p/pkg/utils/utils.go"
+        "$p/pkg/utils/formfields.go"
+        "$p/pkg/utils/formfill_test.go"
+        "$p/pkg/utils/maps.go"
+        "$p/pkg/utils/regex.go"
+        "$p/pkg/utils/utils_test.go"
+        "$p/pkg/utils/extensions/extensions.go"
+        "$p/pkg/utils/extensions/extensions_test.go"
+        "$p/pkg/utils/filters/filters.go"
+        "$p/pkg/utils/filters/filters_test.go"
+        "$p/pkg/utils/filters/simple.go"
+        "$p/pkg/utils/queue/priority_queue.go"
+        "$p/pkg/utils/queue/priority_queue_test.go"
+        "$p/pkg/utils/queue/queue.go"
+        "$p/pkg/utils/queue/stack.go"
+        "$p/pkg/utils/queue/stack_test.go"
+        "$p/pkg/utils/queue/stragegy.go"
+        "$p/pkg/utils/scope/scope.go"
+        "$p/pkg/utils/scope/scope_test.go"
+        "$p/cmd/functional-test/main.go"
+        "$p/cmd/functional-test/run.sh"
+        "$p/cmd/integration-test/filters.go"
+        "$p/cmd/integration-test/integration-test.go"
+        "$p/cmd/integration-test/library.go"
+        "$p/cmd/katana/main.go"
+        "$p/cmd/tools/crawl-maze-score/main.go"
+    )
+
+    # Check for existence of main folder
+    if [ ! -d "$p" ]; then
+        echo -e "\e[31m[ERROR]\e[0m Katana is not installed."
+        missing_files=false
+        return 1
+    fi
+
+    # Loop through and check if all directories exist
+    for dir in "${dirs_to_check[@]}"; do
+        if [ ! -d "$dir" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $dir directory is missing."
+            missing_files=true
+        fi
+        sleep 0.1
+    done
+
+    # Loop through and check if all files exist
+    for file in "${files_to_check[@]}"; do
+        if [ ! -e "$file" ]; then
+            echo -e "\e[31m[MISSING]\e[0m $file is missing."
+            missing_files=true
+        fi
+        sleep 0.1
+    done
+
+    # Final check: If something is missing, show a warning
+    if $missing_files; then
+        echo -e "\e[33m[WARNING]\e[0m Katana is missing some files."
+    else
+        echo -e "\e[32m[SUCCESS]\e[0m Katana seems to be installed properly."
+    fi
+}
+
+install_tool() {
+    local tool_name="$1"
+    case "$tool_name" in
+        "dig"|"Dig"|"DIG")
+            tool_name="Domain Info Gropper"
+
+            start_animation "Installing $tool_name..."
+
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Simulate the installation process
+            sudo apt-get update -qq > /dev/null 2>&1
+            sudo apt-get install -y dnsutils -qq > /dev/null 2>&1
+
+            stop_animation
+            echo -e "\n\e[32m[INFO]\e[0m $tool_name installed successfully."
+            ;;
+        "nmap"|"Nmap"|"NMAP")
+            tool_name="nmap"
+
+            start_animation "Installing $tool_name..."
+
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Install Nmap and handle errors
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nmap > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install $tool_name. Check your internet connection or package configuration."
+                return
+            fi
+
+            # Stop animation and confirm success
+            stop_animation
+            echo -e "\e[32m[SUCCESS]\e[0m $tool_name installed successfully."
+            ;;
+        "katana"|"Katana"|"KATANA")
+            tool_name="Katana"
+
+            start_animation "Installing $tool_name..."
+
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Ensure Git is installed
+            if ! command -v git &> /dev/null; then
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git is not installed. Installing Git..."
+                start_animation "Installing Git..."
+                sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null && \
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git > /dev/null 2>&1 || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Git. Check your internet connection."
+                    return
+                }
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git installed successfully."
+            else
+                echo -e "\e[34m[INFO]\e[0m Git is already installed. Skipping installation."
+            fi
+
+            # Ensure Go is installed
+            if [ ! -f /usr/local/go/bin/go ]; then
+                echo -e "\e[34m[INFO]\e[0m Go is not installed. Installing Go 1.21.6..."
+                start_animation "Installing Go..."
+                wget -q https://go.dev/dl/go1.21.6.linux-amd64.tar.gz -O "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to download Go tarball."
+                    return
+                }
+                sudo tar -C /usr/local -xzf "$HOME/go.tar.gz" > /dev/null 2>&1 && rm -f "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to extract Go tarball."
+                    return
+                }
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Go installed successfully."
+                source $HOME/.bashrc
+
+                export PATH=$PATH:/usr/local/go/bin
+                if ! grep -q "/usr/local/go/bin" "$HOME/.bashrc"; then
+                    echo "export PATH=\$PATH:/usr/local/go/bin" >> "$HOME/.bashrc"
+                    echo -e "\e[34m[INFO]\e[0m Persisted Go PATH update in ~/.bashrc."
+                fi
+            else
+                echo -e "\e[34m[INFO]\e[0m Go is already installed. Skipping installation."
+            fi
+
+            # Install prerequisites for tree-sitter
+            start_animation "Installing prerequisites..."
+            sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y build-essential cmake curl > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install prerequisites."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Prerequisites for tree-sitter installed successfully."
+
+            # Clone and install tree-sitter
+            start_animation "Installing tree-sitter..."
+            git clone https://github.com/tree-sitter/tree-sitter.git "$HOME/tree-sitter" > /dev/null 2>&1 && \
+            cd "$HOME/tree-sitter" > /dev/null && make > /dev/null 2>&1 && sudo make install > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install tree-sitter."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Tree-sitter installed successfully."
+
+            # Install Node.js and tree-sitter-cli
+            start_animation "Installing Node.js and tree-sitter-cli..."
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - > /dev/null 2>&1 && \
+            sudo DEBIAN_FRONTEND=noninteractive apt install -qq -y nodejs > /dev/null 2>&1 && \
+            sudo npm install -g tree-sitter-cli > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install Node.js or tree-sitter-cli."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Node.js and tree-sitter-cli installed successfully."
+
+            # Clone or clean up Katana repository
+            if [ -d "$HOME/katana" ]; then
+                echo -e "\e[34m[INFO]\e[0m Existing Katana directory found. Cleaning up..."
+                rm -rf "$HOME/katana" > /dev/null 2>&1
+            fi
+
+            echo -e "\e[34m[INFO]\e[0m Downloading the Katana repository by ProjectDiscovery from GitHub..."
+            start_animation "Cloning Katana repository..."
+            git clone https://github.com/projectdiscovery/katana.git "$HOME/katana" > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to clone Katana repository."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Katana repository cloned successfully."
+
+            # Build Katana
+            start_animation "Building Katana binary..."
+            cd "$HOME/katana/cmd/katana" > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Katana build directory not found."
+                return
+            }
+            go mod tidy > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to tidy Go modules."
+                return
+            }
+            go build -tags=javascript -o katana > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to build Katana."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Katana built successfully."
+
+            # Move Katana binary to /usr/local/bin
+            echo -e "\e[34m[INFO]\e[0m Finalizing installation..."
+            sudo mv "$HOME/katana/cmd/katana/katana" /usr/local/bin/ > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Failed to move Katana binary."
+                return
+            }
+            echo -e "\e[32m[SUCCESS]\e[0m Katana installed successfully and is ready to use."
+            ;;
+        "subfinder"|"Subfinder"|"SUBFINDER")
+            tool_name="Subfinder"
+
+            start_animation "Installing $tool_name..."
+
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Ensure Git is installed
+            if ! command -v git &> /dev/null; then
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git is not installed. Installing Git..."
+                start_animation "Installing Git..."
+                sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq > /dev/null && \
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git > /dev/null 2>&1 || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Git. Check your internet connection."
+                    return
+                }
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git installed successfully."
+            else
+                echo -e "\e[34m[INFO]\e[0m Git is already installed. Skipping installation."
+            fi
+
+            # Ensure Go is installed
+            if [ ! -f /usr/local/go/bin/go ]; then
+                echo -e "\e[34m[INFO]\e[0m Go is not installed. Installing Go 1.21.6..."
+                start_animation "Installing Go..."
+                wget -q https://go.dev/dl/go1.21.6.linux-amd64.tar.gz -O "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to download Go tarball."
+                    return
+                }
+                sudo tar -C /usr/local -xzf "$HOME/go.tar.gz" > /dev/null 2>&1 && rm -f "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to extract Go tarball."
+                    return
+                }
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Go installed successfully."
+                source $HOME/.bashrc
+
+                export PATH=$PATH:/usr/local/go/bin
+                if ! grep -q "/usr/local/go/bin" "$HOME/.bashrc"; then
+                    echo "export PATH=\$PATH:/usr/local/go/bin" >> "$HOME/.bashrc"
+                    echo -e "\e[34m[INFO]\e[0m Persisted Go PATH update in ~/.bashrc."
+                fi
+            else
+                echo -e "\e[34m[INFO]\e[0m Go is already installed. Skipping installation."
+            fi
+
+            # Clone or clean up subfinder repository
+            if [ -d "$HOME/subfinder" ]; then
+                echo -e "\e[34m[INFO]\e[0m Existing Subfinder directory found. Cleaning up..."
+                rm -rf "$HOME/subfinder" > /dev/null 2>&1
+            fi
+
+            echo -e "\e[34m[INFO]\e[0m Downloading the Subfinder repository by ProjectDiscovery from GitHub..."
+            start_animation "Cloning Subfinder repository..."
+            git clone https://github.com/projectdiscovery/subfinder.git "$HOME/subfinder" > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to clone Subfinder repository."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Subfinder repository cloned successfully."
+
+            # Build Subfinder
+            start_animation "Building Subfinder binary..."
+            cd "$HOME/subfinder/v2/cmd/subfinder" > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Subfinder build directory not found."
+                return
+            }
+
+            go build -o subfinder . > /dev/null 2>&1 || {
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to build Subfinder."
+                return
+            }
+            stop_animation
+            echo -e "\e[34m[INFO]\e[0m Subfinder built successfully."
+
+            # Move Subfinder binary to /usr/local/bin
+            echo -e "\e[34m[INFO]\e[0m Finalizing installation..."
+            sudo mv "$HOME/subfinder/v2/cmd/subfinder/subfinder" /usr/local/bin/ > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Failed to move Subfinder binary."
+                return
+            }
+            echo -e "\e[32m[SUCCESS]\e[0m Subfinder installed successfully and is ready to use."
+            ;;
+        "xssvibes"|"XSSVIBES"|"Xssvibes"|"xss_vibes"|"XSS_VIBES")
+                tool_name="XSS_VIBES"
+
+                start_animation "Installing $tool_name..."
+                # Step 1: Update system and install required packages
+                echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+                if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                    return
+                fi
+                stop_animation
+
+                # Move to home directory
+                cd "$HOME" > /dev/null 2>&1 || {
+                    echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                    return
+                }
+
+                # Ensure Git is installed
+                if ! command -v git &> /dev/null; then
+                    echo -e "\e[34m[INFO]\e[0m Git is not installed. Installing Git..."
+                    start_animation "Installing Git..."
+                    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git > /dev/null 2>&1; then
+                        stop_animation
+                        echo -e "\e[31m[ERROR]\e[0m Failed to install Git. Check your internet connection."
+                        return
+                    fi
+                    stop_animation
+                    echo -e "\e[34m[INFO]\e[0m Git installed successfully."
+                else
+                    echo -e "\e[34m[INFO]\e[0m Git is already installed. Skipping installation."
+                fi
+
+                # Install Python and related packages
+                start_animation "Installing Python related packages..."
+                if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y python3 python3-pip python3-venv > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Python and related packages."
+                    return
+                fi
+                stop_animation
+
+                # Clone repository
+                start_animation "Cloning XSS Vibes repository..."
+                if ! git clone https://github.com/faiyazahmad07/xss_vibes "$HOME/xss_vibes" > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to clone XSS Vibes repository."
+                    return
+                fi
+                stop_animation
+
+                # Navigate to repository directory
+                if ! cd "$HOME/xss_vibes" > /dev/null 2>&1; then
+                    echo -e "\e[31m[ERROR]\e[0m Failed to navigate to XSS Vibes directory."
+                    return
+                fi
+
+                # Create Python virtual environment
+                start_animation "Creating Python virtual environment..."
+                if ! python3 -m venv venv > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to create Python virtual environment."
+                    return
+                fi
+                stop_animation
+
+                # Activate the virtual environment
+                start_animation "Activating Python virtual environment..."
+                if ! source venv/bin/activate > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to activate Python virtual environment."
+                    return
+                fi
+                stop_animation
+
+                # Install Python dependencies
+                start_animation "Installing Python dependencies..."
+                if ! pip install -r requirements > /dev/null 2>&1; then
+                    deactivate > /dev/null 2>&1
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Python dependencies. Check the requirements file."
+                    return
+                fi
+                stop_animation
+
+                # Deactivate the virtual environment
+                deactivate > /dev/null 2>&1
+
+                # Success message
+                echo -e "\e[32m[SUCCESS]\e[0m $tool_name installed successfully and is ready to use."
+            ;;
+        "Metasploit"|"metasploit"|"METASPLOIT")
+            tool_name="Metasploit Framework"
+
+            start_animation "Installing $tool_name..."
+            # Step 1: Update and upgrade system
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Ensure Git is installed
+            if ! command -v git &> /dev/null; then
+                echo -e "\e[34m[INFO]\e[0m Git is not installed. Installing Git..."
+                start_animation "Installing Git..."
+                if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Git. Check your internet connection."
+                    return
+                fi
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git installed successfully."
+            else
+                echo -e "\e[34m[INFO]\e[0m Git is already installed. Skipping installation."
+            fi
+
+            # Step 2: Install required dependencies
+            start_animation "Installing required dependencies..."
+            metasploit_dependencies=(nmap build-essential patch ruby3.1 ruby-dev libcurl4-openssl-dev libffi-dev libxml2 libxml2-dev libxslt1-dev zlib1g-dev liblzma-dev libpq-dev libgmp-dev libpcap-dev)
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "${metasploit_dependencies[@]}" > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install required dependencies."
+                return
+            fi
+            stop_animation
+
+            # Step 3: Configure Ruby environment
+            start_animation "Configuring Ruby environment..."
+            mkdir -p "$HOME/.gem"
+            if ! grep -q 'export GEM_HOME="$HOME/.gem"' "$HOME/.bashrc"; then
+                echo 'export GEM_HOME="$HOME/.gem"' >> "$HOME/.bashrc"
+            fi
+            if ! grep -q 'export PATH="$HOME/.gem/bin:$PATH"' "$HOME/.bashrc"; then
+                echo 'export PATH="$HOME/.gem/bin:$PATH"' >> "$HOME/.bashrc"
+            fi
+            source "$HOME/.bashrc"
+            stop_animation
+
+            # Ensure proper permissions for system-wide gem directory (fallback)
+            if [ ! -w "/var/lib/gems/3.1.0" ]; then
+                echo -e "\e[34m[INFO]\e[0m Adjusting permissions for system-wide gem directory..."
+                if ! sudo chmod -R o+w /var/lib/gems/3.1.0 > /dev/null 2>&1; then
+                    echo -e "\e[31m[ERROR]\e[0m Failed to adjust permissions for /var/lib/gems/3.1.0. Please run the script with sudo or manually adjust permissions."
+                    return
+                fi
+                echo -e "\e[34m[INFO]\e[0m Permissions adjusted successfully."
+            fi
+
+            # Ensure proper permissions for system-wide bin directory (fallback)
+            if [ ! -w "/usr/local/bin" ]; then
+                echo -e "\e[34m[INFO]\e[0m Adjusting permissions for system-wide gem directory..."
+                if ! sudo chmod -R o+w /usr/local/bin > /dev/null 2>&1; then
+                    echo -e "\e[31m[ERROR]\e[0m Failed to adjust permissions for /usr/local/bin. Please run the script with sudo or manually adjust permissions."
+                    return
+                fi
+                echo -e "\e[34m[INFO]\e[0m Permissions adjusted successfully."
+            fi
+
+            # Step 4: Clone Metasploit Framework repository
+            echo -e "\e[34m[INFO]\e[0m Cloning Metasploit Framework repository..."
+            echo -e "\e[34m[INFO]\e[0m This could take a while..."
+            start_animation "Cloning Metasploit repository..."
+            if ! git clone https://github.com/rapid7/metasploit-framework.git "$HOME/metasploit-framework" > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to clone Metasploit Framework repository."
+                return
+            fi
+            stop_animation
+
+            # Step 5: Install Bundler and required gems
+            cd "$HOME/metasploit-framework" || { echo -e "\e[31m[ERROR]\e[0m Failed to navigate to Metasploit Framework directory."; return; }
+            start_animation "Installing Bundler..."
+            if ! sudo gem install bundler > $HOME/output.txt 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install Bundler."
+                return
+            fi
+            stop_animation
+
+            start_animation "Installing PostgreSQL gem..."
+            if ! sudo gem install pg -- --with-pg-config=/usr/bin/pg_config > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install PostgreSQL gem."
+                return
+            fi
+            stop_animation
+
+            start_animation "Installing required gems via Bundler..."
+            if ! sudo bundle install > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install required gems via Bundler."
+                return
+            fi
+            stop_animation
+
+            # Step 6: Configure global PATH for Metasploit
+            start_animation "Configuring global PATH for Metasploit..."
+            if ! grep -q 'export PATH="$HOME/metasploit-framework:$PATH"' "$HOME/.bashrc"; then
+                echo 'export PATH="$HOME/metasploit-framework:$PATH"' >> "$HOME/.bashrc"
+                source "$HOME/.bashrc"
+            fi
+            stop_animation
+
+            cd
+            source .bashrc
+
+            # Step 7: Final verification
+            start_animation "Verifying installation..."
+            if command -v msfconsole > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[32m[SUCCESS]\e[0m $tool_name installed successfully and is ready to use."
+            else
+                stop_animation
+                echo -e "\e[33m[WARNING]\e[0m $tool_name installation completed, but 'msfconsole' is not globally accessible. Check your PATH configuration."
+                return
+            fi
+
+            ;;
+        "ffuf"|"Ffuf"|"FFUF"|"FUFF"|"Fuff"|"fuff")
+            tool_name="ffuf"
+            seclist_name="SecLists"
+
+            start_animation "Installing $tool_name..."
+
+            # Step 1: Update and upgrade system
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Ensure Go is installed
+            if [ ! -f /usr/local/go/bin/go ]; then
+                echo -e "\e[34m[INFO]\e[0m Go is not installed. Installing Go 1.21.6..."
+                start_animation "Installing Go..."
+                wget -q https://go.dev/dl/go1.21.6.linux-amd64.tar.gz -O "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to download Go tarball."
+                    return
+                }
+                sudo tar -C /usr/local -xzf "$HOME/go.tar.gz" > /dev/null 2>&1 && rm -f "$HOME/go.tar.gz" || {
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to extract Go tarball."
+                    return
+                }
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Go installed successfully."
+                source $HOME/.bashrc
+
+                export PATH=$PATH:/usr/local/go/bin
+                if ! grep -q "/usr/local/go/bin" "$HOME/.bashrc"; then
+                    echo "export PATH=\$PATH:/usr/local/go/bin" >> "$HOME/.bashrc"
+                    echo -e "\e[34m[INFO]\e[0m Persisted Go PATH update in ~/.bashrc."
+                fi
+            else
+                echo -e "\e[34m[INFO]\e[0m Go is already installed. Skipping installation."
+            fi
+
+            # Ensure Git is installed
+            if ! command -v git &> /dev/null; then
+                echo -e "\e[34m[INFO]\e[0m Git is not installed. Installing Git..."
+                start_animation "Installing Git..."
+                if ! sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install Git. Check your internet connection."
+                    return
+                fi
+                stop_animation
+                echo -e "\e[34m[INFO]\e[0m Git installed successfully."
+            else
+                echo -e "\e[34m[INFO]\e[0m Git is already installed. Skipping installation."
+            fi
+
+            # Step 3: Install ffuf
+            start_animation "Installing $tool_name..."
+            if ! go install github.com/ffuf/ffuf/v2@latest > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install $tool_name. Ensure Go is correctly installed and configured."
+                return
+            fi
+            echo "export PATH=\$PATH:\$HOME/go/bin" >> $HOME/.bashrc
+            source $HOME/.bashrc
+            source .bashrc
+
+            stop_animation
+            echo -e "\e[32m[SUCCESS]\e[0m $tool_name installed successfully and is ready to use."
+
+            # Step 4: Prompt user for SecLists installation
+            read -rp "Do you want to install $seclist_name for fuzzing as well [Y/n]? " user_input
+            user_input=${user_input:-Y}
+            user_input=$(echo "$user_input" | tr '[:upper:]' '[:lower:]') # Normalize input
+
+            if [[ "$user_input" == "y" || "$user_input" == "yes" ]]; then
+                start_animation "Installing $seclist_name..."
+                if ! git clone https://github.com/danielmiessler/SecLists.git > /dev/null 2>&1; then
+                    stop_animation
+                    echo -e "\e[31m[ERROR]\e[0m Failed to install $seclist_name. Check your internet connection or package manager."
+                    return
+                fi
+                stop_animation
+                echo -e "\e[32m[SUCCESS]\e[0m $seclist_name installed successfully at ~/SecLists."
+            fi
+            ;;
+        "wpscan"|"Wpscan"|"WPSCAN")
+            tool_name="wpscan"
+
+            start_animation "Installing $tool_name..."
+
+            # Step 1: Update and upgrade system
+            echo -e "\e[34m[INFO]\e[0m Updating and upgrading system..."
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt update > /dev/null 2>&1 && sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to update and upgrade the system. Check your internet connection."
+                return
+            fi
+            stop_animation
+
+            # Move to home directory
+            cd "$HOME" > /dev/null 2>&1 || {
+                echo -e "\e[31m[ERROR]\e[0m Cannot move to user home directory."
+                return
+            }
+
+            # Step 1: Install required dependencies
+            start_animation "Installing required dependencies..."
+            wpscan_dependencies=(build-essential patch ruby3.1 ruby-dev libcurl4-openssl-dev libffi-dev libxml2 libxml2-dev libxslt1-dev zlib1g-dev liblzma-dev libpq-dev libgmp-dev libpcap-dev)
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "${wpscan_dependencies[@]}" > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install required dependencies for $tool_name."
+                return
+            fi
+            stop_animation
+
+            # Step 3: Configure Ruby environment
+            start_animation "Configuring Ruby environment..."
+            sleep 0.5
+            mkdir -p "$HOME/.gem"
+            if ! grep -q 'export GEM_HOME="$HOME/.gem"' "$HOME/.bashrc"; then
+                echo 'export GEM_HOME="$HOME/.gem"' >> "$HOME/.bashrc"
+            fi
+            if ! grep -q 'export PATH="$HOME/.gem/bin:$PATH"' "$HOME/.bashrc"; then
+                echo 'export PATH="$HOME/.gem/bin:$PATH"' >> "$HOME/.bashrc"
+            fi
+            cd
+            source $HOME/.bashrc
+            source .bashrc
+            stop_animation
+
+            # Step 2: Install wpscan
+            start_animation "Installing $tool_name..."
+            if ! sudo gem install wpscan > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m Failed to install $tool_name. Check your Ruby installation."
+                return
+            fi
+            stop_animation
+
+            # Step 3: Final verification
+            start_animation "Verifying $tool_name installation..."
+            if command -v wpscan > /dev/null 2>&1; then
+                stop_animation
+                echo -e "\e[32m[SUCCESS]\e[0m $tool_name is ready to use."
+            else
+                stop_animation
+                echo -e "\e[31m[ERROR]\e[0m $tool_name installation completed, but 'wpscan' is not globally accessible. Check your PATH configuration."
+                return
+            fi
+            ;;
+        *)
+            echo -e "\n\e[31m[ERROR]\e[0m Tool $tool_name not recognized or installation not implemented."
+            ;;
+    esac
+}
+
+progress_animation() {
+    local message=$1
+    local chars="/-\|"
+    while true; do
+        for ((i=0; i<${#chars}; i++)); do
+            printf "\r\e[32m[INFO]\e[0m %s %s   " "$message" "${chars:$i:1}"
+            sleep 0.1
+        done
+    done
+}
+
+# Function to manage the progress animation process
+start_animation() {
+    progress_animation "$1" &
+    animation_pid=$!
+}
+
+stop_animation() {
+    kill "$animation_pid" > /dev/null 2>&1
+    wait "$animation_pid" 2>/dev/null
+    printf "\r\e[K" # Clears the line with the animation
+}
+
+# Function to handle the arguments and options
+parse_args() {
+    local OPTIND
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--tool)
+                TOOL_NAME="$2"
+                if [ -z "$TOOL_NAME" ]; then
+                    echo -e "\e[31m[ERROR]\e[0m option requires an argument"
+                    echo -e "\e[32m[USE]: -t [string] \t name of the tool you want to check for\e[0m"
+                    exit 1
+                fi
+                shift 2
+                ;;
+            -a|--all)
+                RUN_ALL=true
+                shift
+                ;;
+            -h|--help)
+                # Display README.txt content or help message
+                if [ -f "/usr/local/bin/README.txt" ]; then
+                    cat /usr/local/bin/README.txt
+                else
+                    echo -e "\e[31m[ERROR]\e[0m README.txt not found!"
+                fi
+                exit 0
+                ;;
+            -l|--list)
+                # List all available tools
+                echo -e "\e[32m[AVAILABLE TOOLS TO MANAGE]\e[0m"
+                echo -e "\n\e[34m[1]\e[0m - METASPLOIT"
+                echo -e "\n\e[34m[2]\e[0m - XSS_VIBES"
+                echo -e "\n\e[34m[3]\e[0m - FFUF"
+                echo -e "\n\e[34m[4]\e[0m - WPSCAN"
+                echo -e "\n\e[34m[5]\e[0m - DIG (Domain Information Gropper)"
+                echo -e "\n\e[34m[6]\e[0m - NMAP"
+                echo -e "\n\e[34m[7]\e[0m - KATANA"
+                echo -e "\n\e[34m[8]\e[0m - SUBFINDER"
+                exit 0
+                ;;
+            -i|--install)
+                INSTALL_TOOL="$2"
+                if [ -z "$INSTALL_TOOL" ]; then
+                        echo -e "\e[31m[ERROR]\e[0m option requires an argument"
+                        echo -e "\e[34m[INFO]\e[0m Try -h or  --help"
+                        exit 1
+                fi
+                install_tool "$INSTALL_TOOL"
+                exit 0
+                ;;
+            *)
+                echo -e "\e[31m[ERROR]\e[0m Invalid option: $1"
+                echo -e "\e[34m[INFO]\e[0m Try -h or --help."
+                exit 1
+                ;;
+        esac
+    done
+
+    # Ensure at least one of the flags is provided
+    if [ -z "$TOOL_NAME" ] && [ -z "$RUN_ALL" ]; then
+        echo -e "\e[31m[ERROR]\e[0m No option specified."
+        echo -e "\e[34m[INFO]\e[0m Try -h or --help."
+        exit 1
+    fi
+
+    # Handle RUN_ALL flag
+    if [ "$RUN_ALL" = true ]; then
+        TOOL_NAME="all"
+    fi
+}
+
+# Function to check a specific tool
+check_tool() {
+    case "$TOOL_NAME" in
+        "metasploit"|"Metasploit"|"METASPLOIT")
+            find_metasploit
+            check_metasploit_installation
+            ;;
+        "ffuf"|"FFUF"|"Ffuf")
+            check_ffuf_installation
+            ;;
+        "wpscan"|"WPSCAN"|"Wpscan")
+            check_wpscan_installation
+            ;;
+        "nmap"|"NMAP"|"Nmap")
+            check_nmap_installation
+            ;;
+        "subfinder"|"SUBFINDER"|"Subfinder")
+            check_subfinder_installation
+            ;;
+        "katana"|"KATANA"|"Katana")
+            check_katana_installation
+            ;;
+        "xss_vibes"|"XSS_VIBES"|"xssvibes"|"XSSVIBES")
+            check_xss_installation
+            ;;
+        "dig"|"DIG"|"Dig")
+            check_dig_installation
+            ;;
+        "all"|"ALL"|"All")
+            find_metasploit
+            check_metasploit_installation
+            check_ffuf_installation
+            check_wpscan_installation
+            check_nmap_installation
+            check_xss_installation
+            check_subfinder_installation
+            check_katana_installation
+            check_dig_installation
+            ;;
+        *)
+            echo -e "\e[31m[ERROR]\e[0m Unknown tool: $TOOL_NAME"
+            exit 1
+            ;;
+    esac
+}
+
+
+# Main execution
+echo -e "\e[34m[INFO]\e[0m STARTING XPLOIT MANAGER..."
+
+# Pass arguments
+parse_args "$@"
+
+# Call the function based on the user's input
+check_tool
+
+echo -e "\n\e[34m[DONE]\e[0m CHECK DONE."
