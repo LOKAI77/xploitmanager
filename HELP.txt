@@ -34,7 +34,7 @@ Examples:
 3. List available tools for installation/check:
    $ xploit -l
 
-4. Run all checks and installations:
+4. Run all checks:
    $ xploit -a
 
 --------------------------------------------------------------------------------
