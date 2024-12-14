@@ -1,5 +1,5 @@
 
-![Logo](https://dev.geoplayer.cz/uploads/xploit_logo.png)
+![Logo](https://dev.geoplayer.cz/uploads/65a4fa65ds4fasd56f4as6f44.png)
 
 
 # XPLOIT MANAGER
