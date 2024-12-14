@@ -1210,11 +1210,11 @@ parse_args() {
                 shift
                 ;;
             -h|--help)
-                # Display README.txt content or help message
-                if [ -f "/usr/local/bin/README.txt" ]; then
-                    cat /usr/local/bin/README.txt
+                # Display HELP.txt content or help message
+                if [ -f "$HOME/xploitmanager/HELP.txt" ]; then
+                    cat $HOME/xploitmanager/HELP.txt
                 else
-                    echo -e "\e[31m[ERROR]\e[0m README.txt not found!"
+                    echo -e "\e[31m[ERROR]\e[0m HELP.txt not found!"
                 fi
                 exit 0
                 ;;
