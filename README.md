@@ -14,7 +14,7 @@ xploit is a versatile bash script that checks for the installation status of var
 
 ## Features
 
-- Check for installation of a prefered tool
+- Check for installation of a preferred tool
 - One click installation of tools from available list
 
 
