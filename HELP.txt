@@ -42,5 +42,5 @@ Important Notes:
 --------------------------------------------------------------------------------
 
 - You will get the best results on fresh enviroment
-- Made for Debian 12. (I dont guarantee sucessfull executions on other distrinutions)
+- Made for Debian 12. (I dont guarantee sucessfull executions on other distributions)
 - I dont take responsibility for misuse of tools provided for installation
