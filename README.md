@@ -12,6 +12,7 @@
 
 - **Check for presence** of a prefered tool
 - **One click installation** of tools from available list
+- **Tools curently available** for check and installation: METASPLOIT, XSS_VIBES, NMAP, FFUF, WPSCAN, DIG, KATANA, SUBFINDER
 
 ## INSTALLATION
 
@@ -76,7 +77,7 @@ Important Notes:
 --------------------------------------------------------------------------------
 
 - You will get the best results on fresh enviroment
-- Made for Debian 12. (I dont guarantee sucessfull executions on other distrinutions)
+- Made for Debian 12. (I dont guarantee sucessfull execution on other distributions)
 - I dont take responsibility for misuse of tools provided for installation
 ```
 
