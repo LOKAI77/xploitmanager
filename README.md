@@ -76,7 +76,8 @@ Examples:
 Important Notes:
 --------------------------------------------------------------------------------
 
-- You will get the best results on fresh enviroment
+- Xploit performs the best in fresh and clean enviroments, you'll have higher chance of
+  getting an error if you already have lots of other tools installed
 - Made for Debian 12. (I dont guarantee sucessfull execution on other distributions)
 - I dont take responsibility for misuse of tools provided for installation
 ```
