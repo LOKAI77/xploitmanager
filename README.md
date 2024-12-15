@@ -10,7 +10,7 @@
 
 ![image](https://dev.geoplayer.cz/uploads/987af98da7fa98f7as9f7adf9.png)
 
-- **Check for presence** of a prefered tool
+- **Check for presence** of a preferred tool
 - **One click installation** of tools from available list
 - **Tools curently available** for check and installation: METASPLOIT, XSS_VIBES, NMAP, FFUF, WPSCAN, DIG, KATANA, SUBFINDER
 
