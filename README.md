@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://dev.geoplayer.cz/uploads/65a4fa65ds4fasd56f4as6f44.png" alt="xploit" width="400px">
+  <img src="https://i.ibb.co/70rmdpT/68a4f5d1a65f4asf56sda4fsa.png" alt="xploit" width="600px">
   <br>
 </h1>
 
@@ -8,7 +8,7 @@
 
 # FEATURES
 
-![image](https://dev.geoplayer.cz/uploads/987af98da7fa98f7as9f7adf9.png)
+![image](https://i.ibb.co/23pNySBd/987af98da7fa98f7as9f7adf9.png)
 
 - **Check for presence** of a preferred tool
 - **One click installation** of the tools from the availables list
